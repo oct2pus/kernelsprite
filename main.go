@@ -120,9 +120,11 @@ func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 					return err
 				}
 			}
-			log.Printf("error: %v\nMoving on...\n", err)
 			return nil
 		})
+		if err != nil {
+			logError(errorMessage, err)
+		}
 	}
 }
 
