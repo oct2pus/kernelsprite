@@ -30,8 +30,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("client-id    : %s\n", app.ClientID)
-	fmt.Printf("client-secret: %s\n", app.ClientSecret)
 	c := mastodon.NewClient(&mastodon.Config{
 		Server:       "https://botsin.space",
 		ClientID:     app.ClientID,
@@ -44,7 +42,6 @@ func main() {
 	}
 	// there is probably a better way of doing this
 	code = strings.Replace(code, "\n", "", -1)
-	fmt.Println("The code was: " + code + "!")
 	err = c.AuthenticateToken(context.Background(), code, app.RedirectURI)
 	if err != nil {
 		log.Fatal(err)
