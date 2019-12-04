@@ -69,20 +69,24 @@ func main() {
 
 	defer db.Close()
 	// loop for infinity
+	sleep := time.Duration(10)
 	for {
 		fmt.Println("==============")
 		checkHashtag(c, db)
+		time.Sleep(sleep * time.Second)
 		fmt.Println("==============")
 		checkFollows(c, db)
-		time.Sleep(10 * time.Second)
+		time.Sleep(sleep * time.Second)
 	}
 }
 
 func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 	statuses, err := c.GetTimelineHashtag(context.Background(), "HomestuckReread2020", false, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Could not check hashtag: %v.\nMoving on...\n", err)
+		return
 	}
+	var errorMessage string
 	fmt.Printf("Found %v statuses\n", len(statuses))
 	notStored := make([]*mastodon.Status, 0, len(statuses))
 	if len(statuses) > 0 {
@@ -94,7 +98,7 @@ func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 					notStored = append(notStored, ele)
 					_, err := c.Reblog(context.Background(), ele.ID)
 					if err != nil {
-						println("view statuses - could not reblog post")
+						errorMessage = "View statuses - could not reblog post."
 						return err
 					}
 				}
@@ -102,7 +106,7 @@ func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 			return nil
 		})
 		if err != nil {
-			log.Fatal(err)
+			logError(errorMessage, err)
 		}
 	}
 	fmt.Printf("Storing %v new statuses.\n", len(notStored))
@@ -112,10 +116,11 @@ func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 			for _, ele := range notStored {
 				err = bucket.Put([]byte(ele.URL), []byte(ele.ID))
 				if err != nil {
-					println("update statuses - could not store status")
+					errorMessage = "update statuses - could not store status"
 					return err
 				}
 			}
+			log.Printf("error: %v\nMoving on...\n", err)
 			return nil
 		})
 	}
@@ -124,14 +129,16 @@ func checkHashtag(c *mastodon.Client, db *bolt.DB) {
 func checkFollows(c *mastodon.Client, db *bolt.DB) {
 	self, err := c.GetAccountCurrentUser(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Lost in the sauce: %v\nMoving on...\n", err)
+		return
 	}
+	var errorMessage string
 	// the way this is being checked feels like it could become a bottleneck if
 	// there are somehow thousands of followers. Check this first before
 	// looking for other performance optimizations.
 	accounts, err := c.GetAccountFollowers(context.Background(), self.ID, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("")
 	}
 	fmt.Printf("Found %v Followers.\n", len(accounts))
 	notStored := make([]*mastodon.Account, 0, len(accounts))
@@ -144,7 +151,7 @@ func checkFollows(c *mastodon.Client, db *bolt.DB) {
 					notStored = append(notStored, ele)
 					_, err := c.AccountFollow(context.Background(), ele.ID)
 					if err != nil {
-						println("view followers - could not follow follower")
+						errorMessage = "View followers - could not follow follower"
 						return err
 					}
 				}
@@ -152,7 +159,7 @@ func checkFollows(c *mastodon.Client, db *bolt.DB) {
 			return nil
 		})
 		if err != nil {
-			log.Fatal(err)
+			logError(errorMessage, err)
 		}
 	}
 	fmt.Printf("Storing %v new followers.\n", len(notStored))
@@ -160,17 +167,24 @@ func checkFollows(c *mastodon.Client, db *bolt.DB) {
 		err = db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(followers)
 			if err != nil {
-				println("update followers - could not create followers db")
+				errorMessage = "Update followers - could not create followers db."
 				return err
 			}
 			for _, ele := range notStored {
 				err = bucket.Put([]byte(ele.URL), []byte(ele.ID))
 				if err != nil {
-					println("update followers - could not store follower")
+					errorMessage = "Update followers - could not store follower."
 					return err
 				}
 			}
 			return nil
 		})
+		if err != nil {
+			logError(errorMessage, err)
+		}
 	}
+}
+
+func logError(message string, err error) {
+	log.Printf(message+"\nerror: %v\nMoving on...\n", err)
 }
